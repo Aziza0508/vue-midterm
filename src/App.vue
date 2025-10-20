@@ -12,9 +12,15 @@
   </header>
 
   <main class="container">
-    <Transition name="fade" mode="out-in">
-      <RouterView />
-    </Transition>
+<RouterView v-slot="{ Component }" :key="$route.fullPath">
+  <transition name="fade" mode="out-in">
+    <component :is="Component" />
+  </transition>
+</RouterView>
+
+
+
+
   </main>
 </template>
 
