@@ -1,4 +1,3 @@
-
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
@@ -22,25 +21,33 @@ const { has, toggle } = useFavorites()
 
 <template>
   <div v-if="error" class="empty">{{ error }}</div>
+
   <div v-else-if="isLoading" class="grid">
     <div class="skeleton" style="height:320px; grid-column:1/-1"></div>
     <div class="skeleton" style="height:24px; width:60%"></div>
     <div class="skeleton" style="height:16px; width:40%"></div>
     <div class="skeleton" style="height:200px"></div>
   </div>
+
   <div v-else-if="data">
     <div v-if="backdrop" style="border-radius:16px; overflow:hidden; margin-bottom:12px">
       <img :src="backdrop" alt="" style="width:100%; display:block; object-fit:cover;">
     </div>
 
     <div style="display:grid; grid-template-columns: 220px 1fr; gap: 18px;">
-      <img :src="poster" :alt="data.title" style="width:100%; border-radius:16px; border:1px solid rgba(255,255,255,0.06)">
+      <img v-if="poster" :src="poster" :alt="data.title" style="width:100%; border-radius:16px; border:1px solid rgba(255,255,255,0.06)">
+
       <div style="display:grid; gap: 10px;">
-        <h1 style="margin:0">{{ data.title }} <span style="color:var(--muted); font-size:0.8em;">{{ year }}</span></h1>
+        <h1 style="margin:0">{{ data.title }} 
+          <span style="color:var(--muted); font-size:0.8em;">{{ year }}</span>
+        </h1>
+
         <RatingStars :value="data.vote_average" />
+
         <div style="display:flex; flex-wrap:wrap; gap:8px;">
-          <span v-for="g in data.genres" :key="g.id" class="badge">{{ g.name }}</span>
+          <span v-for="g in data.genres || []" :key="g.id" class="badge">{{ g.name }}</span>
         </div>
+
         <p style="color:var(--muted)">{{ data.overview }}</p>
 
         <div style="display:flex; gap:8px; flex-wrap:wrap">
