@@ -21,7 +21,7 @@ npm run dev
 
 ## Environment
 ```
-VITE_TMDB_KEY=YOUR_V3_API_KEY_HERE
+VITE_TMDB_KEY=3a12d0afa9bebf8d80369ec842de8fab
 ```
 
 ## Credits

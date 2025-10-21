@@ -24,7 +24,7 @@ export type Filters = {
   query: string
   genreId?: number
   year?: number
-  sortBy: string // e.g. 'popularity.desc' | 'vote_average.desc' | 'primary_release_date.desc' | 'primary_release_date.asc'
+  sortBy: string
 }
 
 async function get(path: string, params: Record<string, any> = {}) {

@@ -18,12 +18,10 @@ const {
 } = useDiscover()
 
 function apply() {
-  // При любом изменении набора фильтров начинаем сначала
   fetchPage(1)
 }
 
 onMounted(() => {
-  // Первая загрузка
   fetchPage(1)
 })
 </script>
