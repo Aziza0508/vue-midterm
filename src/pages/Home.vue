@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted } from 'vue'
 import { useDiscover } from '../composables/useTmdb'
 import MovieCard from '../components/MovieCard.vue'
 import FilterBar from '../components/FilterBar.vue'
@@ -18,10 +18,12 @@ const {
 } = useDiscover()
 
 function apply() {
+  // При любом изменении набора фильтров начинаем сначала
   fetchPage(1)
 }
 
 onMounted(() => {
+  // Первая загрузка
   fetchPage(1)
 })
 </script>
@@ -29,7 +31,7 @@ onMounted(() => {
 <template>
   <div class="home">
     <h1 class="title">Discover</h1>
-    
+
     <FilterBar :genres="genres" v-model="filters" @apply="apply" />
 
     <div v-if="error" class="empty">{{ error }}</div>

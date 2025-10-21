@@ -1,4 +1,5 @@
-import { ref, computed, watchEffect, unref, reactive, type Ref } from 'vue'
+// src/composables/useTmdb.ts
+import { ref, computed, watchEffect, unref, type Ref } from 'vue'
 
 const API = 'https://api.themoviedb.org/3'
 const KEY = import.meta.env.VITE_TMDB_KEY
@@ -19,17 +20,27 @@ export type Genre = {
   name: string
 }
 
+export type Filters = {
+  query: string
+  genreId?: number
+  year?: number
+  sortBy: string // e.g. 'popularity.desc' | 'vote_average.desc' | 'primary_release_date.desc' | 'primary_release_date.asc'
+}
+
 async function get(path: string, params: Record<string, any> = {}) {
   const url = new URL(`${API}${path}`)
   url.searchParams.set('api_key', KEY)
   url.searchParams.set('language', 'en-US')
+  url.searchParams.set('include_adult', 'false')
+
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null && v !== '') {
       url.searchParams.set(k, String(v))
     }
   }
-  const res = await fetch(url.toString())
-  if (!res.ok) throw new Error(`Failed to fetch ${path}`)
+
+  const res = await fetch(url.toString(), { cache: 'no-store' }) // важно: выключаем кэш
+  if (!res.ok) throw new Error(`Failed to fetch ${path} (${res.status})`)
   return res.json()
 }
 
@@ -53,12 +64,13 @@ export function useDiscover() {
   const totalPages = ref(1)
   const loading = ref(false)
   const error = ref<string | null>(null)
-  
-  const filters = reactive({
+
+  // ВАЖНО: filters — это ref, чтобы v-model корректно менял объект
+  const filters = ref<Filters>({
     query: '',
-    genreId: undefined as number | undefined,
-    year: undefined as number | undefined,
-    sortBy: 'popularity.desc'
+    genreId: undefined,
+    year: undefined,
+    sortBy: 'popularity.desc',
   })
 
   async function loadGenres() {
@@ -73,70 +85,65 @@ export function useDiscover() {
     loading.value = true
     error.value = null
     try {
-      let data
-      
-      if (filters.query.trim()) {
-        data = await searchMovies(filters.query, p)
-        
-        let filteredResults = data.results
-        
-        if (filters.genreId) {
-          filteredResults = filteredResults.filter((movie: Movie) => 
-            movie.genre_ids?.includes(filters.genreId!)
+      const f = filters.value // читаем актуальную ссылку один раз
+
+      // Ветка поиска — сервер фильтрует по query, остальное фильтруем/сортируем локально
+      if (f.query.trim()) {
+        const data = await searchMovies(f.query, p)
+        let results: Movie[] = Array.isArray(data.results) ? data.results : []
+
+        if (f.genreId) {
+          const gid = Number(f.genreId)
+          results = results.filter(m => Array.isArray(m.genre_ids) && m.genre_ids.includes(gid))
+        }
+
+        if (f.year) {
+          const y = Number(f.year)
+          results = results.filter(m => {
+            if (!m.release_date) return false
+            const year = new Date(m.release_date).getFullYear()
+            return year === y
+          })
+        }
+
+        // Локальная сортировка
+        if (f.sortBy === 'vote_average.desc') {
+          results.sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0))
+        } else if (f.sortBy === 'primary_release_date.desc') {
+          results.sort(
+            (a, b) =>
+              new Date(b.release_date ?? 0).getTime() -
+              new Date(a.release_date ?? 0).getTime()
+          )
+        } else if (f.sortBy === 'primary_release_date.asc') {
+          results.sort(
+            (a, b) =>
+              new Date(a.release_date ?? 0).getTime() -
+              new Date(b.release_date ?? 0).getTime()
           )
         }
-        
-        if (filters.year) {
-          filteredResults = filteredResults.filter((movie: Movie) => {
-            if (!movie.release_date) return false
-            const movieYear = new Date(movie.release_date).getFullYear()
-            return movieYear === filters.year
-          })
-        }
-        
-  
-        if (filters.sortBy === 'vote_average.desc') {
-          filteredResults.sort((a: Movie, b: Movie) => b.vote_average - a.vote_average)
-        } else if (filters.sortBy === 'primary_release_date.desc') {
-          filteredResults.sort((a: Movie, b: Movie) => {
-            const dateA = a.release_date ? new Date(a.release_date).getTime() : 0
-            const dateB = b.release_date ? new Date(b.release_date).getTime() : 0
-            return dateB - dateA
-          })
-        } else if (filters.sortBy === 'primary_release_date.asc') {
-          filteredResults.sort((a: Movie, b: Movie) => {
-            const dateA = a.release_date ? new Date(a.release_date).getTime() : 0
-            const dateB = b.release_date ? new Date(b.release_date).getTime() : 0
-            return dateA - dateB
-          })
-        }
+        // popularity.* оставляем как есть — search уже ранжирует по релевантности/популярности
 
-        movies.value = filteredResults
-        totalPages.value = Math.min(data.total_pages, 500)
-      } else {
-
-        const params: Record<string, any> = {
-          page: p,
-          sort_by: filters.sortBy,
-          include_adult: false
-        }
-        
-        if (filters.genreId) {
-          params.with_genres = filters.genreId
-        }
-        
-        if (filters.year) {
-          params.primary_release_year = filters.year
-        }
-        
-        data = await fetchMovies(params)
-        movies.value = data.results
-        totalPages.value = Math.min(data.total_pages, 500)
+        movies.value = results
+        page.value = data.page ?? p
+        totalPages.value = Math.min(data.total_pages ?? 1, 500)
+        return
       }
-      
-      page.value = p
+
+      // Ветка discover — все фильтры уходим в query-параметры
+      const params: Record<string, any> = {
+        page: p,
+        sort_by: f.sortBy || 'popularity.desc',
+      }
+      if (f.genreId) params.with_genres = Number(f.genreId)
+      if (f.year) params.primary_release_year = Number(f.year)
+
+      const d = await fetchMovies(params)
+      movies.value = Array.isArray(d.results) ? d.results : []
+      page.value = d.page ?? p
+      totalPages.value = Math.min(d.total_pages ?? 1, 500)
     } catch (e: any) {
-      error.value = e.message || 'Unknown error'
+      error.value = e?.message || 'Unknown error'
     } finally {
       loading.value = false
     }
@@ -145,24 +152,26 @@ export function useDiscover() {
   function next() {
     if (page.value < totalPages.value) fetchPage(page.value + 1)
   }
-  
+
   function prev() {
     if (page.value > 1) fetchPage(page.value - 1)
   }
 
+  // первая загрузка жанров (список фильмов грузится снаружи через apply)
   loadGenres()
 
-  return { 
-    movies, 
+  return {
+    movies,
     genres,
-    page, 
-    totalPages, 
-    loading, 
-    error, 
-    filters,
-    fetchPage, 
-    next, 
-    prev 
+    page,
+    totalPages,
+    loading,
+    error,
+    filters,     // ref<Filters>
+    fetchPage,
+    next,
+    prev,
+    loadGenres,
   }
 }
 
@@ -179,10 +188,10 @@ export function useMovieDetails(id: number | Ref<number>) {
       isLoading.value = true
       error.value = null
       data.value = await get(`/movie/${movieId}`, {
-        append_to_response: 'credits,videos'
+        append_to_response: 'credits,videos',
       })
     } catch (e: any) {
-      error.value = e.message || 'Failed to load movie details'
+      error.value = e?.message || 'Failed to load movie details'
     } finally {
       isLoading.value = false
     }
@@ -194,7 +203,9 @@ export function useMovieDetails(id: number | Ref<number>) {
 
   const trailerKey = computed(() => {
     const vids = data.value?.videos?.results || []
-    const yt = vids.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer') || vids.find((v: any) => v.site === 'YouTube')
+    const yt =
+      vids.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer') ||
+      vids.find((v: any) => v.site === 'YouTube')
     return yt?.key
   })
 

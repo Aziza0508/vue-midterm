@@ -2,60 +2,115 @@
 import { ref, watch } from 'vue'
 import type { Genre } from '../composables/useTmdb'
 
+type Filters = { query: string; genreId?: number; year?: number; sortBy: string }
+
 const props = defineProps<{
   genres: Genre[]
-  modelValue: { query: string; genreId?: number; year?: number; sortBy: string }
+  modelValue: Filters
 }>()
-const emit = defineEmits(['update:modelValue', 'apply'])
 
-const local = ref({ ...props.modelValue })
+const emit = defineEmits<{
+  (e: 'update:modelValue', v: Filters): void
+  (e: 'apply'): void
+}>()
 
-watch(() => props.modelValue, (v) => local.value = { ...v })
+// Локальная копия для удобного ввода
+const local = ref<Filters>({ ...props.modelValue })
 
-// Обработчик для жанра - преобразуем пустую строку в undefined
-function handleGenreChange(event: Event) {
-  const value = (event.target as HTMLSelectElement).value
-  local.value.genreId = value === '' ? undefined : Number(value)
+// Если снаружи фильтры поменялись — синхронизируем
+watch(
+  () => props.modelValue,
+  (v) => { local.value = { ...v } },
+  { deep: true }
+)
+
+// Универсальный пуш наверх (с приведением типов)
+function push() {
+  emit('update:modelValue', {
+    query: local.value.query ?? '',
+    genreId:
+      local.value.genreId === undefined ||
+      local.value.genreId === null ||
+      (local.value.genreId as unknown as string) === ''
+        ? undefined
+        : Number(local.value.genreId),
+    year:
+      local.value.year === undefined ||
+      local.value.year === null ||
+      (local.value.year as unknown as string) === ''
+        ? undefined
+        : Number(local.value.year),
+    sortBy: local.value.sortBy || 'popularity.desc',
+  })
 }
 
-// Обработчик для года - преобразуем пустую строку в undefined
-function handleYearInput(event: Event) {
-  const value = (event.target as HTMLInputElement).value
-  local.value.year = value === '' ? undefined : Number(value)
+// Handlers: сразу обновляем модель при изменениях
+function onQueryInput(e: Event) {
+  local.value.query = (e.target as HTMLInputElement).value
+  push()
+}
+
+function onGenreChange(e: Event) {
+  const raw = (e.target as HTMLSelectElement).value
+  local.value.genreId = raw === '' ? undefined : Number(raw)
+  push()
+}
+
+function onYearInput(e: Event) {
+  const raw = (e.target as HTMLInputElement).value
+  local.value.year = raw === '' ? undefined : Number(raw)
+  push()
+}
+
+function onSortChange(e: Event) {
+  local.value.sortBy = (e.target as HTMLSelectElement).value
+  push()
 }
 
 function apply() {
-  emit('update:modelValue', { ...local.value })
+  // гарантируем актуальную модель и просим родителя перезагрузить
+  push()
   emit('apply')
 }
 </script>
 
 <template>
-  <div style="display:grid; gap:10px; grid-template-columns: 1fr 150px 120px 160px; align-items:end; margin-bottom: 16px">
+  <div
+    style="display:grid; gap:10px; grid-template-columns: 1fr 150px 120px 160px; align-items:end; margin-bottom: 16px"
+  >
     <div>
       <label>Search</label>
-      <input class="input" placeholder="movie title…" v-model="local.query" @keydown.enter="apply">
+      <input
+        class="input"
+        placeholder="movie title…"
+        :value="local.query"
+        @input="onQueryInput"
+        @keydown.enter="apply"
+      />
     </div>
+
     <div>
       <label>Genre</label>
-      <select :value="local.genreId ?? ''" @change="handleGenreChange">
+      <select :value="local.genreId ?? ''" @change="onGenreChange">
         <option value="">Any</option>
         <option v-for="g in genres" :key="g.id" :value="g.id">{{ g.name }}</option>
       </select>
     </div>
+
     <div>
       <label>Year</label>
-      <input 
-        class="input" 
-        type="number" 
-        placeholder="e.g., 2023" 
+      <input
+        class="input"
+        type="number"
+        placeholder="e.g., 2023"
         :value="local.year ?? ''"
-        @input="handleYearInput"
-      >
+        @input="onYearInput"
+      />
     </div>
+
     <div>
       <label>Sort by</label>
-      <select v-model="local.sortBy">
+      <select :value="local.sortBy" @change="onSortChange">
         <option value="popularity.desc">Popularity ↓</option>
         <option value="popularity.asc">Popularity ↑</option>
         <option value="vote_average.desc">Rating ↓</option>
@@ -63,6 +118,7 @@ function apply() {
         <option value="primary_release_date.asc">Release date ↑</option>
       </select>
     </div>
+
     <div style="grid-column: 1 / -1; display:flex; gap:10px; justify-content:flex-end">
       <button class="btn" @click="apply">Apply</button>
     </div>
@@ -122,7 +178,7 @@ select:focus {
   div[style*="grid-template-columns"] {
     grid-template-columns: 1fr !important;
   }
-  
+
   .btn {
     width: 100%;
   }
