@@ -1,4 +1,4 @@
-
+#Link: https://youtu.be/ZrQBLI2aCZw
 # Movie Recommendation Hub (Vue 3 + Vite + Pinia + TMDb)
 
 A well-structured Vue 3 app that showcases TMDb data with discover/search, detailed pages, favorites, charts, CSV/PDF export, and trailer modals. Designed to hit midterm rubric + bonus tasks.
